@@ -33,7 +33,7 @@ bundle agent local_user_management_add_users_fileedit (users) {
             "groupfile"                 string => "/etc/group";
             "userlist"                  slist  => getindices("$(users)");
             "pwentry[$(userlist)]"      string => "$(userlist):x:$($(users)[$(userlist)][uid]):$($(users)[$(userlist)][gid]):$($(users)[$(userlist)][gecos]):$($(users)[$(userlist)][home]):$($(users)[$(userlist)][shell])";
-#            "groupentry[$(userlist)]"   string => "$($(users)[$(userlist)][groupname]):x:$($(users)[$(userlist)][gid]):";
+            "groupentry[$(userlist)]"   string => "$($(users)[$(userlist)][groupname]):x:$($(users)[$(userlist)][gid]):";
             "escaped_pwhash[$(userlist)]" string => escape("$($(users)[$(userlist)][passwdhash])");
             "escaped_uid[$(userlist)]"  string => escape("$($(users)[$(userlist)][uid])");
             "escaped_gid[$(userlist)]"  string => escape("$($(users)[$(userlist)][gid])");
@@ -516,15 +516,11 @@ bundle agent local_user_management_add_users_fileedit (users) {
                                     The _noseed option disables user directory seeding.";
 
 
-            # I want to push public ssh keys to the users from a master repository
+            # I want to push public ssh keys to the users from a master repository on new user creation
             "$($(users)[$(userlist)][home])/.ssh/authorized_keys"
-#                create    => "true",
-                depth_search    => recurse("inf"),
                 copy_from => secure_cp("$(sys.workdir)/masterfiles/inthinc/keys/$($(users)[$(userlist)][authorized_keys])","$(sys.policy_hub)"),
                 perms       => mog("600", "$($(users)[$(userlist)][uid])", "$($(users)[$(userlist)][gid])"),
-                #perms           => og("$($(users)[$(userlist)][uid])", "$($(users)[$(userlist)][gid])"),
-                #ifvarclass      => "authorized_keys_defined_$(userlist)",
-                #ifvarclass      => "local_user_management_add_users_fileedit_seed_$(userlist).authorized_keys_defined_$(userlist)",
+                ifvarclass      => "local_user_management_add_users_fileedit_seed_$(userlist).authorized_keys_defined_$(userlist).!_noseed_defined_$(userlist).!_nocreate_home_$(userlist)",
                 comment         => "Add users authorized_keys file to users home directory only when we create the home
                                     The authorized_keys option enables user authorized_keys adding.";
 
@@ -533,7 +529,7 @@ bundle agent local_user_management_add_users_fileedit (users) {
                 create      => "true",
                 perms       => mog("700", "$($(users)[$(userlist)][uid])", "$($(users)[$(userlist)][gid])"),
                 classes     => if_repaired("local_user_management_add_users_fileedit_seed_$(userlist)"),
-                ifvarclass => "local_user_management_add_users_fileedit_add_$(userlist).!_nocreate_home_$(userlist)",
+                ifvarclass      => "local_user_management_add_users_fileedit_seed_$(userlist).authorized_keys_defined_$(userlist).!_noseed_defined_$(userlist).!_nocreate_home_$(userlist)",
                 comment     => "Make sure users .ssh directory exists and is owned by them and 700 perms";
 
 
