@@ -12,9 +12,10 @@ bundle agent local_user_management_add_users_fileedit (users) {
 #       "users[testuser][shell]"          string => "/bin/bash";
 #       "users[testuser][passwdhash]"     string => "$1$cCMJbSmS$/tQtxSsLZmYq3/zp1Vm/l0";
 #       # Optional settings
-#       "users[testuser][groupname]       string => "mygroupname";
-#       "users[testuser][_allow_dup_gid] string => "anythinggoeshere";
-#       "users[testuser][_noseed]        string => "antyhinggoes here"; # if set when a users directory is created it will not be seeded
+#       "users[testuser][groupname]"       string => "mygroupname";
+#       "users[testuser][_allow_dup_gid]" string => "anythinggoeshere";
+#       "users[testuser][_noseed]"        string => "antyhinggoes here"; # if set when a users directory is created it will not be seeded
+#       "users[testuser][authorized_keys]        string => "authorized_keys_filename"; # if set will put the users ssh public key list in ~/.ssh/authorized_keys
 #       If groupname is set a named group will be created with the specified gid
 #       by default we wont create a named group with a non_unique gid, setting _allow_dup_gid
 #       enables this behavior.
@@ -32,7 +33,7 @@ bundle agent local_user_management_add_users_fileedit (users) {
             "groupfile"                 string => "/etc/group";
             "userlist"                  slist  => getindices("$(users)");
             "pwentry[$(userlist)]"      string => "$(userlist):x:$($(users)[$(userlist)][uid]):$($(users)[$(userlist)][gid]):$($(users)[$(userlist)][gecos]):$($(users)[$(userlist)][home]):$($(users)[$(userlist)][shell])";
-            "groupentry[$(userlist)]"   string => "$($(users)[$(userlist)][groupname]):x:$($(users)[$(userlist)][gid]):";
+#            "groupentry[$(userlist)]"   string => "$($(users)[$(userlist)][groupname]):x:$($(users)[$(userlist)][gid]):";
             "escaped_pwhash[$(userlist)]" string => escape("$($(users)[$(userlist)][passwdhash])");
             "escaped_uid[$(userlist)]"  string => escape("$($(users)[$(userlist)][uid])");
             "escaped_gid[$(userlist)]"  string => escape("$($(users)[$(userlist)][gid])");
@@ -180,12 +181,17 @@ bundle agent local_user_management_add_users_fileedit (users) {
                            a named group with a duplicate uid";
 
         "_noseed_defined_$(userlist)"
-            expression => isvariable("$(users)[$(userlist)[_noseed]"),
+            expression => isvariable("$(users)[$(userlist)][_noseed]"),
             comment    => "Set class if the noseed option is set so that we
                            know not to seed the users home directory";
 
+        "authorized_keys_defined_$(userlist)"
+            expression => isvariable("$(users)[$(userlist)][authorized_keys]"),
+            comment    => "Set class if the authorized_keys option is set so that we
+                           know to add the users authorized_keys file in their home directory";
+
         "_nocreate_home_$(userlist)"
-            expression => isvariable("$(users)[$(userlist)[_nocreate_home]"),
+            expression => isvariable("$(users)[$(userlist)][_nocreate_home]"),
             comment    => "Set class if we do not want the users home directory
                            created";
 
@@ -198,12 +204,12 @@ bundle agent local_user_management_add_users_fileedit (users) {
             expression => isvariable("shadowentry[$(userlist)]");
 
         "_enforce_$(userlist)"
-            expression => isvariable("$(users)[$(userlist)[_enforce]"),
+            expression => isvariable("$(users)[$(userlist)][_enforce]"),
             comment    => "Set class if we want to enforce the user settings";
 
 
         "_userdel_$(userlist)"
-            expression => isvariable("$(users)[$(userlist)[_userdel]"),
+            expression => isvariable("$(users)[$(userlist)][_userdel]"),
             comment    => "Set class if we want to remove the users passwd and shadow entries";
 
         "required_elements_defined_$(userlist)"
@@ -508,6 +514,28 @@ bundle agent local_user_management_add_users_fileedit (users) {
                 comment         => "Seed home directory with skel, but only when we create the home
                                     directory the user should have the choice to remove the seeded files.
                                     The _noseed option disables user directory seeding.";
+
+
+            # I want to push public ssh keys to the users from a master repository
+            "$($(users)[$(userlist)][home])/.ssh/authorized_keys"
+#                create    => "true",
+                depth_search    => recurse("inf"),
+                copy_from => secure_cp("$(sys.workdir)/masterfiles/inthinc/keys/$($(users)[$(userlist)][authorized_keys])","$(sys.policy_hub)"),
+                perms       => mog("600", "$($(users)[$(userlist)][uid])", "$($(users)[$(userlist)][gid])"),
+                #perms           => og("$($(users)[$(userlist)][uid])", "$($(users)[$(userlist)][gid])"),
+                #ifvarclass      => "authorized_keys_defined_$(userlist)",
+                #ifvarclass      => "local_user_management_add_users_fileedit_seed_$(userlist).authorized_keys_defined_$(userlist)",
+                comment         => "Add users authorized_keys file to users home directory only when we create the home
+                                    The authorized_keys option enables user authorized_keys adding.";
+
+            # Create the users home directory and seed it with the typical files
+            "$($(users)[$(userlist)][home])/.ssh"
+                create      => "true",
+                perms       => mog("700", "$($(users)[$(userlist)][uid])", "$($(users)[$(userlist)][gid])"),
+                classes     => if_repaired("local_user_management_add_users_fileedit_seed_$(userlist)"),
+                ifvarclass => "local_user_management_add_users_fileedit_add_$(userlist).!_nocreate_home_$(userlist)",
+                comment     => "Make sure users .ssh directory exists and is owned by them and 700 perms";
+
 
             # We only want to create the named group if groupname defined and allow non unique or
             # if groupname defined and there is no gid conflict
